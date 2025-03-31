@@ -1,10 +1,10 @@
-name: Build and Deploy
+name: Build and Release
 
 on:
   push:
     tags:
       - 'v*.*.*'    # Match version tags
-  workflow_dispatch:      
+  workflow_dispatch:
 
 jobs:
   build:
@@ -37,6 +37,7 @@ jobs:
       TARGET_ARCH: ${{ matrix.target_arch }}
       GO_VERSION: ${{ matrix.go-version }}
       OUTPUT: ${{ matrix.output || 'bettercap' }}
+      VERSION: ${{ github.ref_name }} # Get version from tag
 
     steps:
     - name: Checkout Code
@@ -54,7 +55,6 @@ jobs:
     - name: Install Dependencies (macOS)
       if: ${{ matrix.os == 'macos-latest' }}
       run: brew install libpcap libusb p7zip
-
 
     - name: Install libusb via mingw (Windows)
       if: ${{ matrix.os == 'windows-latest' }}
@@ -84,22 +84,48 @@ jobs:
         openssl dgst -sha256 "${{ env.OUTPUT }}" | tee bettercap_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ env.VERSION }}.sha256
         7z a "bettercap_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ env.VERSION }}.zip" "${{ env.OUTPUT }}" "bettercap_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ env.VERSION }}.sha256"
 
-  deploy:
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: bettercap-${{ matrix.target_os }}-${{ matrix.target_arch }}-${{ env.VERSION }}
+        path: |
+          bettercap_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ env.VERSION }}.zip
+          bettercap_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ env.VERSION }}.sha256
+
+  release:
     needs: [build]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     name: Release
     runs-on: ubuntu-latest
     steps:
-        - name: Checkout Code
-          uses: actions/checkout@v2
-          with:
-            submodules: true
+      - name: Checkout Code
+        uses: actions/checkout@v2
 
-        - name: Upload Release Assets
-          uses: softprops/action-gh-release@v1
-          with:
-            files: |
-                bettercap_*.zip
-                bettercap_*.sha256
-    env:
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+      - name: Download Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: bettercap-*
+          path: artifacts
+
+      - name: Find all zip files
+        run: |
+          find artifacts -name "*.zip" -print0 | while IFS= read -r -d $'\0' file; do
+            echo "::set-output name=zip_files::$file"
+          done
+        id: find_zip_files
+
+      - name: Find all sha256 files
+        run: |
+          find artifacts -name "*.sha256" -print0 | while IFS= read -r -d $'\0' file; do
+            echo "::set-output name=sha256_files::$file"
+          done
+        id: find_sha256_files
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ${{ steps.find_zip_files.outputs.zip_files }}
+            ${{ steps.find_sha256_files.outputs.sha256_files }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
