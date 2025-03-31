@@ -85,7 +85,7 @@ jobs:
         7z a "bettercap_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ env.VERSION }}.zip" "${{ env.OUTPUT }}" "bettercap_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ env.VERSION }}.sha256"
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # Updated to v4
       with:
         name: bettercap-${{ matrix.target_os }}-${{ matrix.target_arch }}-${{ env.VERSION }}
         path: |
@@ -102,7 +102,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Download Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4  # Updated to v4
         with:
           name: bettercap-*
           path: artifacts
